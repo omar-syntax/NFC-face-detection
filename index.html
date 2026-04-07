@@ -1,0 +1,110 @@
+    <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Attendance - Tablet</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Load face-api.js from CDN -->
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script defer src="script.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">🎭</span>
+                <h1>Attendance</h1>
+            </div>
+            <ul class="nav-links">
+                <li id="nav-scan" class="active">
+                    <span class="icon">🔍</span> Scanner
+                </li>
+                <li id="nav-register">
+                    <span class="icon">👤</span> Register
+                </li>
+            </ul>
+            <div class="server-status">
+                <span class="status-dot"></span>
+                <span id="server-msg">Connecting to API...</span>
+            </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            
+            <!-- SECTION 1: SCANNER -->
+            <section id="section-scan" class="view">
+                <header class="section-header">
+                    <h2>Live Attendance Scanner</h2>
+                    <p>Facing the camera to mark your attendance</p>
+                </header>
+                
+                <div class="scanner-container">
+                    <div class="video-wrapper">
+                        <video id="video" autoplay muted playsinline></video>
+                        <canvas id="overlay"></canvas>
+                        <div class="scan-frame"></div>
+                    </div>
+                </div>
+
+                <div id="scan-result" class="result-toast hidden">
+                    <span class="result-icon">✅</span>
+                    <div class="result-info">
+                        <h4 id="result-name">Student Name</h4>
+                        <p>Attendance Marked!</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION 2: REGISTER -->
+            <section id="section-register" class="view hidden">
+                <header class="section-header">
+                    <h2>Register New Student</h2>
+                    <p>Fill in details and capture face signature</p>
+                </header>
+
+                <div class="register-grid">
+                    <div class="form-container">
+                        <div class="input-group">
+                            <label for="reg-name">Full Name</label>
+                            <input type="text" id="reg-name" placeholder="Ex: Omar Gad" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="reg-class">Class</label>
+                            <input type="text" id="reg-class" placeholder="Ex: B5" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="reg-nfc">NFC Card ID</label>
+                            <input type="text" id="reg-nfc" placeholder="Paste ID from Serial Monitor" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="reg-pass">Admin Password</label>
+                            <input type="password" id="reg-pass" placeholder="Enter password to Register" required>
+                        </div>
+                        <button id="btn-save" class="btn-primary" disabled>
+                            <span class="icon">💾</span> Save Student
+                        </button>
+                    </div>
+
+                    <div class="capture-container">
+                        <div class="preview-wrapper">
+                            <video id="reg-video" autoplay muted playsinline></video>
+                            <canvas id="reg-overlay"></canvas>
+                        </div>
+                        <p class="capture-msg" id="reg-status">Looking for face...</p>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loader" class="loader-overlay">
+        <div class="lds-ripple"><div></div><div></div></div>
+        <p>Loading AI Models...</p>
+    </div>
+</body>
+</html>
