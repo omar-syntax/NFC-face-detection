@@ -6,7 +6,15 @@ const API_BASE = 'https://nfc-api-production.up.railway.app';
 const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
 
 // 🔒 FRONTEND-ONLY PASSWORD
-const ADMIN_PASS = 'admin123'; 
+const ADMIN_PASS = 'admin123';
+
+// ─── RECOGNITION SETTINGS ───────────────────────────────────────────────────
+// Maximum Euclidean distance (0–2) to accept a face as recognized.
+// Lower = stricter. face-api default is 0.6, we use 0.5 for reliability.
+const CONFIDENCE_THRESHOLD = 0.5;
+
+// Minimum time (ms) between two failed-scan notifications to avoid spam.
+const FAIL_COOLDOWN_MS = 3000;
 
 // UI Elements
 const video = document.getElementById('video');
@@ -29,6 +37,8 @@ let faceMatcher = null;
 let currentDescriptor = null;
 let isScanMode = true;
 let isModelsLoaded = false;
+let studentNames = {};           // studentId → name lookup
+let scanFrameResetTimer = null; // for auto-clearing scan-frame state
 
 // ─── INIT: Load Models & Data ───────────────────────────────────────────────
 
@@ -57,8 +67,8 @@ async function init() {
 
 async function startCamera(targetVideo) {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { width: 640, height: 480, facingMode: "user" } 
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: 640, height: 480, facingMode: "user" }
         });
         targetVideo.srcObject = stream;
     } catch (err) {
@@ -85,11 +95,14 @@ async function loadStudents() {
     try {
         const res = await fetch(API_BASE + '/students');
         const students = await res.json();
-        
+
         if (students.length === 0) {
             console.log('ℹ️ No students in DB yet');
             return;
         }
+
+        // Build studentId → name map for display labels
+        students.forEach(s => { studentNames[s.studentId] = s.name || s.studentId; });
 
         labeledFaceDescriptors = students
             .filter(s => s.faceDescriptor)
@@ -101,8 +114,9 @@ async function loadStudents() {
             });
 
         if (labeledFaceDescriptors.length > 0) {
-            faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.6);
-            console.log(`✅ Loaded ${labeledFaceDescriptors.length} face signatures`);
+            // Use CONFIDENCE_THRESHOLD — faces beyond this distance are flagged 'unknown'
+            faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, CONFIDENCE_THRESHOLD);
+            console.log(`✅ Loaded ${labeledFaceDescriptors.length} face signatures (threshold: ${CONFIDENCE_THRESHOLD})`);
         }
     } catch (err) {
         console.error('❌ Load Students Error:', err);
@@ -134,27 +148,56 @@ video.addEventListener('play', () => {
     setInterval(async () => {
         if (!isScanMode || !isModelsLoaded || !faceMatcher) return;
 
-        // Dynamic sync in case of hidden layout changes
+        syncCanvas(video, overlay);
         const displaySize = { width: video.offsetWidth, height: video.offsetHeight };
 
         const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
             .withFaceLandmarks()
             .withFaceDescriptor();
 
-        overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height);
+        const ctx = overlay.getContext('2d');
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
 
-        if (detections) {
-            const resizedDetection = faceapi.resizeResults(detections, displaySize);
-            const bestMatch = faceMatcher.findBestMatch(detections.descriptor);
-            if (bestMatch.label !== 'unknown') {
-                handleSuccessMatch(bestMatch.label);
-            }
+        if (!detections) {
+            // No face visible — reset frame to neutral
+            setScanFrameState(null);
+            return;
+        }
+
+        const resizedDetection = faceapi.resizeResults(detections, displaySize);
+        const bestMatch = faceMatcher.findBestMatch(detections.descriptor);
+
+        // ── DUAL VALIDATION: label check + explicit distance guard ──────────
+        const isRecognized = bestMatch.label !== 'unknown' &&
+                             bestMatch.distance <= CONFIDENCE_THRESHOLD;
+
+        if (isRecognized) {
+            // ✅ Confident match — draw GREEN box and mark attendance
+            setScanFrameState('success');
+            const displayName = studentNames[bestMatch.label] || bestMatch.label;
+            new faceapi.draw.DrawBox(resizedDetection.detection.box, {
+                label: `✓ ${displayName}`,
+                boxColor: '#10b981',
+                lineWidth: 3
+            }).draw(overlay);
+            handleSuccessMatch(bestMatch.label);
+        } else {
+            // ❌ Unknown / low-confidence — draw RED box, NO attendance recorded
+            setScanFrameState('error');
+            const dist = bestMatch.distance.toFixed(2);
+            new faceapi.draw.DrawBox(resizedDetection.detection.box, {
+                label: `✗ Unknown (dist: ${dist})`,
+                boxColor: '#ef4444',
+                lineWidth: 3
+            }).draw(overlay);
+            handleFailedMatch();
         }
     }, 1000);
 });
 
 let lastMatchedId = null;
 let lastMatchTime = 0;
+let lastFailTime = 0;
 
 async function handleSuccessMatch(studentId) {
     const now = Date.now();
@@ -176,11 +219,48 @@ async function handleSuccessMatch(studentId) {
     }
 }
 
+// Called when face is detected but does NOT meet confidence threshold.
+// Has its own cooldown to avoid flooding the user with error messages.
+function handleFailedMatch() {
+    const now = Date.now();
+    if (now - lastFailTime < FAIL_COOLDOWN_MS) return; // cooldown
+    lastFailTime = now;
+    console.warn('⚠️  Face detected but not recognized (below threshold)');
+    showErrorToast();
+}
+
+// Update the animated scan-frame border: null | 'success' | 'error'
+function setScanFrameState(state) {
+    const frame = document.querySelector('.scan-frame');
+    if (!frame) return;
+    frame.classList.remove('success', 'error');
+    if (scanFrameResetTimer) clearTimeout(scanFrameResetTimer);
+    if (state) {
+        frame.classList.add(state);
+        // Auto-clear back to neutral after 2 s
+        scanFrameResetTimer = setTimeout(() => {
+            frame.classList.remove('success', 'error');
+        }, 2000);
+    }
+}
+
 function showToast(name) {
     const toast = document.getElementById('scan-result');
     document.getElementById('result-name').innerText = name;
     toast.classList.remove('hidden');
+    // Hide error toast if success arrives
+    document.getElementById('scan-error').classList.add('hidden');
     setTimeout(() => { toast.classList.add('hidden'); }, 4000);
+}
+
+function showErrorToast() {
+    const toast = document.getElementById('scan-error');
+    toast.classList.remove('hidden');
+    // Trigger re-animation by removing and re-adding the class
+    toast.classList.remove('toast-animate');
+    void toast.offsetWidth; // reflow
+    toast.classList.add('toast-animate');
+    setTimeout(() => { toast.classList.add('hidden'); }, 3500);
 }
 
 // ─── REGISTRATION LOGIC ───────────────────────────────────────────────────────
@@ -257,7 +337,7 @@ btnSave.addEventListener('click', async () => {
             document.getElementById('reg-name').value = '';
             document.getElementById('reg-nfc').value = '';
             document.getElementById('reg-pass').value = '';
-            loadStudents(); 
+            loadStudents();
         }
     } catch (err) {
         alert("Error saving to database.");

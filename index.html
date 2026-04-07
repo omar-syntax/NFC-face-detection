@@ -45,15 +45,22 @@
                     <div class="video-wrapper">
                         <video id="video" autoplay muted playsinline></video>
                         <canvas id="overlay"></canvas>
-                        <div class="scan-frame"></div>
                     </div>
                 </div>
 
-                <div id="scan-result" class="result-toast hidden">
+                <div id="scan-result" class="result-toast success-toast hidden">
                     <span class="result-icon">✅</span>
                     <div class="result-info">
                         <h4 id="result-name">Student Name</h4>
                         <p>Attendance Marked!</p>
+                    </div>
+                </div>
+
+                <div id="scan-error" class="result-toast error-toast hidden">
+                    <span class="result-icon">❌</span>
+                    <div class="result-info">
+                        <h4>Face Not Recognized</h4>
+                        <p>User not found — please try again</p>
                     </div>
                 </div>
             </section>
