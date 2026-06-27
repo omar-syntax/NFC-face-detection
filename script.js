@@ -2,7 +2,7 @@
  * 📊 Smart Attendance System - Tablet Logic
  */
 
-const API_BASE = 'nfc-api.railway.internal';
+const API_BASE = 'https://nfc-api-production-m.up.railway.app';
 const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
 
 // 🔒 FRONTEND-ONLY PASSWORD
